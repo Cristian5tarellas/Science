@@ -1,38 +1,46 @@
 	program Dentate
-	!Author: Cristian Estarellas
-	!Year: 2018
-	!Description: Modelling of the Dentate Circuit to determine the stability of the circuit before and after LTP induction
+	! Author: Cristian Estarellas
+	! Year: 2018
+	! Description: Modelling of the Dentate Circuit to determine the stability of the circuit before and after LTP induction.
+	! The goal is to simulate the activity and stability of this network under different conditions to analyze how the synaptic 
+ 	! strengths and neuronal connections influence overall network behaviour. The model is especially interested in understanding 
+  	! how granule cells (GCs) and interneurons behave in response to EC inputs
+   	 
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% DECLARATION MODEL VARIABLES & INITIALIZATION %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%	
+ 
+ 	!Defining model variables and parameters	
+	integer n_ec,n_gc,n_gc1,n_gc2,n_hil,n_bc,n_mc,n0,n1,n2			! Size populations
+	integer Nf								! Simulation length (number of time steps)	
+	integer inn,ijj								! Dummy indices for loops	
+	integer, parameter :: nn=1200						! Total number of neurons
+	double precision :: dt							! Time step size in ms
+	double precision, dimension (nn) :: a,b,c,d				! Izhikevich parameters for each neuron
+	double precision, dimension (nn) :: v,u,vn,un				! Izhikevich model variables
+	double precision :: rate,Pp,E_po,tau_po					! Parameters for Poisson noise
+	double precision,dimension (nn) :: p_po,g_po,rP,IP			! Poisson synapses parameters
+	integer, dimension (nn) :: jP						! Poisson decay synapses
+	double precision :: kit							! Parameter for Poisson synapse dynamics
+	double precision, dimension (5,5) :: pr					! Probability matrix of connections between neuronal populations
+	integer, dimension (nn,nn)::	CM					! Connectivity matrix between neurons
+	integer, dimension (nn) :: nc_a,nc_n,nc_g				! Counters for AMPA, NMDA, and GABA connections
+	double precision :: tau_n,tau_a,tau_g,g_n,g_a,g_g,E_n,E_a,E_g		! Synaptic parameters
+	double precision, dimension (nn) :: r_a,r_n,r_g				! Neurotransmitter probabilities (R&C - release and capture)
+	double precision, dimension (nn) :: r_an,r_nn,r_gn			! R&C neurotransmitter probabilities for updating
+	double precision, dimension (nn) :: rsum_a,rsum_n,rsum_g		! Total influence of neurotransmitters on each neuron
+	double precision, dimension (nn,nn) :: p_a,p_n,p_g			! Max (R&C) neurotransmitter probabilities per neuron
+	double precision, dimension (nn) :: I_a,I_g,I_n,I_tot			! Currents for AMPA, NMDA, GABA, and total
+	double precision :: v_ec,v_gc,v_hil,v_bc,v_mc				! Membrane potentials for neuron subpopulations									
+	double precision :: p_ec_g						! (R&C) neurotransmitters for GABAergic neurons in EC
+	double precision :: Inh,Exc,Nmda					! Currents in granule cell (GC) population
+	integer :: ns								! ID of the simulation
 
-	!Defining model variables and parameters	
-	integer n_ec,n_gc,n_gc1,n_gc2,n_hil,n_bc,n_mc,n0,n1,n2						!Size populations
-	integer Nf																	!Length simulation	
-	integer inn,ijj																!Dummy iterative parameters	
-	integer, parameter :: nn=1200												!Total number of neurons
-	double precision :: dt														!Defining temporal resolution. Bin size in ms
-	double precision, dimension (nn) :: a,b,c,d									!Izhikevich parameters
-	double precision, dimension (nn) :: v,u,vn,un								!Izhikevich variables
-	double precision :: rate,Pp,E_po,tau_po										!Poisson distribution parameters
-	double precision,dimension (nn) :: p_po,g_po,rP,IP							!Poisson synapses parameters
-	integer, dimension (nn) :: jP												!Poisson decay synapses
-	double precision :: kit														!Poisson reset synapses dynamic
-	double precision, dimension (5,5) :: pr										!Released neurotransmitters probability circuitry
-	integer, dimension (nn,nn)::	CM											!Circuitry connectivity matrix
-	integer, dimension (nn) :: nc_a,nc_n,nc_g									!Counter variables for ampa, nmda and gaba connections
-	double precision :: tau_n,tau_a,tau_g,g_n,g_a,g_g,E_n,E_a,E_g				!Synaptic variables
-	double precision, dimension (nn) :: r_a,r_n,r_g								!Released and Captured (R&C) neurotransmitter probabilities
-	double precision, dimension (nn) :: r_an,r_nn,r_gn							!Released and Captured (R&C) neurotransmitter probabilities UPDATE STEP
-	double precision, dimension (nn) :: rsum_a,rsum_n,rsum_g					!Total current influence 
-	double precision, dimension (nn,nn) :: p_a,p_n,p_g							!Maximum (R&C) neurotransmitter probabilities per neuron type. Ampa, NMDA & GABA
-	double precision, dimension (nn) :: I_a,I_g,I_n,I_tot						!Ampa, nmda, gaba and total currents
-	double precision :: v_ec,v_gc,v_hil,v_bc,v_mc								!Membrane potential of indificual neurons									
-	double precision :: p_ec_g													!(R&C) neurotransmitters for gabaergic interneurons within the enthorinal cortex population
-	double precision :: Inh,Exc,Nmda											!Inhibitory, Ampa excitatory and NMDA exicitatory currents in granular population
-	integer :: ns																!ID number of the simulation
 
-	!ID number of the simulation
+	! Set simulation ID
 	ns=1
 
-	!Initialization of random numbers (from dranxor.f90 program) 
+	! Initialize random number generator (using dranxor.f90)
 	call dran_ini(58115+25*ns)
 
 	
@@ -40,223 +48,185 @@
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% CIRCUIT AND MODEL SETTINGS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-	!Setting simulation parameters
-	dt=0.01d0 						! time step (ms)	
-	Nf=700000						! Total simulation length (saved data: last 500000: 5 seconds)
+	!%%% Model Settings %%%
+	dt=0.01d0                          	! Time step (ms)
+	Nf=700000                          	! Total simulation length
+	                                      		! (save last 500000 steps or 5 seconds)
 	
-	!Population size
-	n_ec=200
-	n_ec1=160
-	n_gc=500
-	n_gc1=n_ec+int(0.65d0*dble(n_gc))
-	n_gc2=n_gc1+int(0.35d0*dble(n_gc))
-	n_hil=100
-	n_bc=100
-	n_mc=300
-	n0=n_ec+n_gc
-	n1=n0+n_hil
-	n2=n1+n_bc
-
-
-	!Parameters Izhikevich
+ 	!Population size for different neuron types
 	!EC
+ 	n_ec=200 				! Total number of neurons
+	n_ec1=160				! Number of excitatory neurons
+	!GC
+ 	n_gc=500				! Total number of neurons
+	n_gc1=n_ec+int(0.65d0*dble(n_gc))	! Number of bursting neurons
+	n_gc2=n_gc1+int(0.35d0*dble(n_gc))	! Number of regular neurons
+	!INTERNEURONS
+ 	n_hil=100				! Total number of Hil interneurons
+	n_bc=100				! Total number of BC interneurons
+	n_mc=300				! Total number of MC interneurons
+	
+ 	! Subdividing the number of neurons by populations
+ 	n0=n_ec+n_gc				! Set 1: EC & GC
+	n1=n0+n_hil				! Set 2: EC-GC & HIL
+	n2=n1+n_bc				! Set 3: EC-GC-HIL & BC
+	!nn is declared as the total numbero of nuerons: EC-GC-HIL-BC & MC
+
+	! Initialize Izhikevich neuron parameters for different neuron types
+	!EC - excitatory neurons: Regular Spiking neurons
 	do inn=1,n_ec1
 		a(inn)=0.02d0
 		b(inn)=0.2d0
 		c(inn)=-60.d0
 		d(inn)=8.d0
 	enddo
+ 	!EC - inhibitory neurons: Fast Spiking neurons
 	do inn=n_ec1+1,n_ec
 		a(inn)=0.1d0
 		b(inn)=0.26d0
 		c(inn)=-65.d0
 		d(inn)=1.d0
 	enddo
-	!GC
+	!GC - Burst Spiking neurons
 	do inn=n_ec+1,n_gc1
 		a(inn)=0.02d0
 		b(inn)=0.2d0
 		c(inn)=-50.d0
 		d(inn)=2.d0
 	enddo
+ 	!GC - Regular Spiking neurons 
 	do inn=n_gc1+1,n_gc2
 		a(inn)=0.02d0
 		b(inn)=0.2d0
 		c(inn)=-60.d0
 		d(inn)=8.d0
 	enddo
-	!HIL
-	do inn=n0+1,n1
+	!HIL, BC & MC - Fast Spiking neurons
+	do inn=n0+1,nn
 		a(inn)=0.1d0
 		b(inn)=0.26d0
 		c(inn)=-65.d0
 		d(inn)=1.d0
 	enddo
-	!BC
-	do inn=n1+1,n2
-		a(inn)=0.1d0
-		b(inn)=0.26d0
-		c(inn)=-65.d0
-		d(inn)=1.d0
-	enddo
-	!MC
-	do inn=n2+1,nn
-		a(inn)=0.1d0
-		b(inn)=0.26d0
-		c(inn)=-65.d0
-		d(inn)=1.d0
-	enddo
+ 
+	! Connectivity probability matrix (rows: presynaptic types, columns: postsynaptic types)
+ 	! Matrix position: EC:1 - GC:2 - HIL:3 - BC:4 - MC:5
+    	! Connectivity matrix is a sparse matrix defining neuron connections
+	pr=0.d0			! Initialization of the matrix of probabilities for the connections
+  	
+	! Connectivity probabilities between neuron types
+	pr(1,1) = 0.5d0     ! EC -> EC
+	pr(1,2) = 0.05d0    ! EC -> GC
+	pr(1,4) = 0.02d0    ! EC -> BC
+	p_ec_g=0.3d0	    ! Excitatory EC -> Inhibitory EC 
+	pr(2,3) = 0.02d0    ! GC -> HIL
+	pr(2,4) = 0.02d0    ! GC -> BC
+	pr(2,5) = 0.02d0    ! GC -> MC
+	pr(3,3) = 0.3d0     ! HIL -> HIL
+	pr(3,4) = 0.6d0     ! HIL -> BC
+	pr(3,5) = 0.2d0     ! HIL -> MC
+	pr(4,4) = 0.1d0     ! BC -> BC
+	pr(4,2) = 0.12d0    ! BC -> GC
+	pr(4,5) = 0.15d0    ! BC -> MC
+	pr(5,5) = 0.15d0    ! MC -> MC
+	pr(5,2) = 0.1d0     ! MC -> GC
+	pr(5,3) = 0.2d0     ! MC -> HIL
+	pr(5,4) = 0.1d0     ! MC -> BC
 
-	!Initial Condition
-	do inn=1,nn
-		v(inn)=-70.d0+5.d0*dran_u()
-		u(inn)=v(inn)*b(inn)
-	enddo
-	vn=0.d0;un=0.d0
-
-	! Poisson Noise
-	rate=0.08d0
-	Pp=exp(-rate*dt)*rate*dt
-	E_po=0d0
-	tau_po=5.26d0	
-	p_po=0.d0
-	g_po=0.d0
-	jP=0.d0
-	rP=0.d0
-
-	!probabilidad neurotransmisores
-	do inn=1,n0		!slow synapses (NMDA)
-		p_po(inn)=0.1d0	
-		g_po(inn)=0.3d0
-	enddo
-	do inn=n0+1,nn	!fast synapses (AMPA & GABAa)
-		p_po(inn)=0.1d0		 
-		g_po(inn)=0.2d0
-	enddo	
-
-
-	!Connectivity
-
-	!matrix of probabilities: ec-gc-hipp-hil-bc-mc
-	!EC:1
-	!GC:2
-	!HIL:3
-	!BC:4
-	!MC:5
-	pr=0.d0
-	!from EC to
-	pr(1,1)=0.5d0		!EC
-	pr(1,2)=0.05d0 		!GC
-	pr(1,4)=0.02d0  	!BC
-	!from GC to
-	pr(2,3)=0.02d0		!HIL
-	pr(2,4)=0.02d0		!BC		
-	pr(2,5)=0.02d0		!MC
-	!from HIL to
-	pr(3,3)=0.3d0		!HIL
-	pr(3,4)=0.6d0		!BC
-	pr(3,5)=0.2d0		!MC
-	!from BC to
-	pr(4,4)=0.1d0		!BC
-	pr(4,2)=0.12d0		!GC
-	pr(4,5)=0.15d0		!MC	
-	!from MC to
-	pr(5,5)=0.15d0		!MC
-	pr(5,2)=0.1d0		!GC
-	pr(5,3)=0.2d0		!HIL
-	pr(5,4)=0.2d0		!BC
-		
-	!Connectivity matrix
+ 
+  	! Randomly generate connectivity matrix based on probability matrix
+	! Initialization of the connectivity matrix between neurons (Binary matrix: 0 - no connected; 1 - connected)
 	CM=0
-	p_ec_g=0.3d0
-	!Connections EC
+ 	! Connections EC ->
 	do inn=1,n_ec1
-		!EC
+		!-> EC
 		do ijj=1,n_ec
 			if(dran_u().le.pr(1,1)) CM(inn,ijj)=1
 		enddo
-		!GC
+		!-> GC
 		do ijj=n_ec+1,n0
 			if(dran_u().le.pr(1,2)) CM(inn,ijj)=1
 		enddo
-		!BC
+		!-> BC
 		do ijj=n1+1,n2
 			if(dran_u().le.pr(1,4)) CM(inn,ijj)=1
 		enddo
 	enddo
+ 	! Connections EC_GABA ->
 	do inn=n_ec1+1,n_ec
-		!EC GABA
+		!-> EC 
 		do ijj=1,n_ec
 			if(dran_u().le.p_ec_g) CM(inn,ijj)=1
 		enddo
 	enddo
-	!Connections GC
+	!Connections GC ->
 	do inn=n_ec+1,n0
-		!HIL
+		!-> HIL
 		do ijj=n0+1,n1
 			if(dran_u().le.pr(2,3)) CM(inn,ijj)=1
 		enddo
-		!BC		
+		!-> BC		
 		do ijj=n1+1,n2
 			if(dran_u().le.pr(2,4)) CM(inn,ijj)=1
 		enddo
-		!MC
+		!-> MC
 		do ijj=n2+1,nn
 			if(dran_u().le.pr(2,5)) CM(inn,ijj)=1
 		enddo
 	enddo
 
-	!Connections HIL
+	!Connections HIL ->
 	do inn=n0+1,n1
-		!HIL
+		!-> HIL
 		do ijj=n0+1,n1
 			if(dran_u().le.pr(3,3)) CM(inn,ijj)=1	
 		enddo
-		!BC
+		!-> BC
 		do ijj=n1+1,n2
 			if(dran_u().le.pr(3,4)) CM(inn,ijj)=1	
 		enddo			
-		!MC
+		!-> MC
 		do ijj=n2+1,nn
 			if(dran_u().le.pr(3,5)) CM(inn,ijj)=1	
 		enddo
 	enddo
 
-	!Conections BC
+	!Conections BC ->
 	do inn=n1+1,n2
-		!GC
+		!-> GC
 		do ijj=n_ec+1,n0
 			if(dran_u().le.pr(4,2)) CM(inn,ijj)=1	
 		enddo
-		!BC
+		!-> BC
 		do ijj=n1+1,n2
 			if(dran_u().le.pr(4,4)) CM(inn,ijj)=1	
 		enddo
-		!MC
+		!-> MC
 		do ijj=n2+1,nn
 			if(dran_u().le.pr(4,5)) CM(inn,ijj)=1	
 		enddo
 	enddo	
 
-	!Connections MC
+	!Connections MC ->
 	do inn=n2+1,nn
-		!GC
+		!-> GC
 		do ijj=n_ec+1,n0
 			if(dran_u().le.pr(5,2)) CM(inn,ijj)=1
 		enddo
-		!HIL
+		!-> HIL
 		do ijj=n0+1,n1
 			if(dran_u().le.pr(5,3)) CM(inn,ijj)=1
 		enddo
-		!BC
+		!-> BC
 		do ijj=n1+1,n2
 			if(dran_u().le.pr(5,4)) CM(inn,ijj)=1	
 		enddo
-		!MC
+		!-> MC
 		do ijj=n2+1,nn
 			if(dran_u().le.pr(5,5)) CM(inn,ijj)=1
 		enddo
 	enddo
+ 	! Ensure no neuron connects to itself (i.e., set diagonal elements to 0)
 	do inn=1,nn
 		CM(inn,inn)=0
 	enddo
@@ -312,6 +282,38 @@
 		if(nc_n(inn).eq.0) nc_n(inn)=1
 		if(nc_g(inn).eq.0) nc_g(inn)=1
 	enddo
+
+ 
+
+	!Initial Condition
+	do inn=1,nn
+		v(inn)=-70.d0+5.d0*dran_u()
+		u(inn)=v(inn)*b(inn)
+	enddo
+	vn=0.d0;un=0.d0
+
+	! Poisson Noise
+	rate=0.08d0
+	Pp=exp(-rate*dt)*rate*dt
+	E_po=0d0
+	tau_po=5.26d0	
+	p_po=0.d0
+	g_po=0.d0
+	jP=0.d0
+	rP=0.d0
+
+	!probabilidad neurotransmisores
+	do inn=1,n0		!slow synapses (NMDA)
+		p_po(inn)=0.1d0	
+		g_po(inn)=0.3d0
+	enddo
+	do inn=n0+1,nn	!fast synapses (AMPA & GABAa)
+		p_po(inn)=0.1d0		 
+		g_po(inn)=0.2d0
+	enddo	
+
+
+	
 
 	!Synapses
 	jt=0
@@ -544,9 +546,10 @@
 	end
 
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% RUNGE-KUTTA SUBROUTINS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%  SUBROUTINS %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 !%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%	
-	!Izhikevich model
+ 
+ 	!Izhikevich model
 	subroutine Runge_Izhikevich(v,u,a,b,I,dt,vn,un,nn)
 	integer :: nn,inn
 	double precision :: v(nn),u(nn),vn(nn),un(nn)
