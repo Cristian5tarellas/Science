@@ -1,4 +1,5 @@
 # Cristian Estarellas – Academic Profile
+![ilustracion](ilustracion.jpg)
 
 <p align=justify>
 My career in <strong>physics</strong> began in 2011 at the University of the Balearic Islands. During my third year, I joined a research group studying nanostructures and quantum cables, leading to publications in 2014 and 2015. After completing a <strong>Master in Complex Systems</strong> (2016), I was awarded the CAIB grant from the Balearic Islands government to pursue a <strong>PhD in Physics</strong>, specializing in computational neuroscience.
